@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import numpy as np
 
 # config pagina
 st.set_page_config(
@@ -14,82 +13,9 @@ st.set_page_config(
 
 @st.cache_data
 def load_and_clean_data():
-    df = pd.read_csv("data/job_market.csv")
-    
-    # Correção que tu fizeste dos nulos lá
-    colunas_texto = ['job_type', 'category', 'skills']
-    df[colunas_texto] = df[colunas_texto].fillna('Não Informado')
-    
-    # Nem sei como q tu fizeste isso aqui pra falar a real, entendi nada, só aceitei
-    df['experience_required'] = df.groupby('job_title')['experience_required'].transform(
-        lambda x: x.fillna(x.median()) if not x.median() is np.nan else x
-    )
-    df = df.dropna(subset=['experience_required'])
-    df['experience_required'] = df['experience_required'].astype(int)
-    
-    # O tratamento de datas aqui, tudo certo!
-    timestamps_normais = pd.to_datetime(df['publication_date'], errors='coerce')
-    timestamps_Unix = pd.to_numeric(df['publication_date'], errors='coerce')
-    datas_Unix = pd.to_datetime(timestamps_Unix, unit='s')
-    df['publication_date'] = timestamps_normais.fillna(datas_Unix)
-    
-    # As counas de salário, mas adicionei fillna(0) pra ter certza.
-    df['salary_min'] = pd.to_numeric(df['salary_min'], errors='coerce').fillna(0)
-    df['salary_max'] = pd.to_numeric(df['salary_max'], errors='coerce').fillna(0)
-    df['salary_avg'] = (df['salary_max'] + df['salary_min']) / 2
-    
-    # Tratamento da parte de localização aqui, juntei tudo e fiz um tanto diferente;
-    seperacao = df['location'].str.split(',', expand=True)
-    df['cidade'] = seperacao[0].str.strip()
-    df['estado'] = seperacao[1].str.strip() if len(seperacao.columns) > 1 else "Não Informado"
-    df.loc[df['cidade'].str.lower() == "remote", 'estado'] = "Remote"
-    
-    # basicamente fui atrás de entender aquele teu lá em cima e percebi q era só um condicional e eu que fui burro.
-    # Aqui é pra saber se o trabalho é remoto ou não.
-    df['is_remote'] = df['job_type'].apply(
-        lambda x: "Sim" if 'remote' in str(x).lower() else ("Não Informado" if x == 'Não Informado' else "Não")
-    )
-
-    # Normalização dos tipos de trabalho
-    def classify_job_type(val):
-        v = str(val).lower().strip()
-        if 'remote' in v:
-            return 'Remote'
-        elif v in ('full-time', 'full time', 'fulltime'):
-            return 'Full-time'
-        elif v in ('part-time', 'part time', 'parttime'):
-            return 'Part-time'
-        elif 'contract' in v or 'freelance' in v or 'temp' in v:
-            return 'Contract'
-        elif 'intern' in v or 'praktik' in v or 'werkstudent' in v or 'student' in v:
-            return 'Internship'
-        else:
-            return 'Other'
-
-    df['job_type_normalized'] = df['job_type'].apply(classify_job_type)
-
-    # Extração de nível de senioridade a partir do job_title
-    def classify_seniority(title):
-        t = str(title).lower()
-        if any(k in t for k in ['praktik', 'intern', 'trainee', 'estágio', 'estagio', 'working student', 'werkstudent']):
-            return 'Intern/Trainee'
-        if 'junior' in t or '(junior)' in t:
-            return 'Junior'
-        if any(k in t for k in ['lead', 'principal', 'head of', 'staff']):
-            return 'Lead/Principal'
-        if 'senior' in t:
-            return 'Senior'
-        return 'Mid/Other'
-
-    df['seniority'] = df['job_title'].apply(classify_seniority)
-
-    # Faixa salarial para filtros mais amigáveis
-    df['salary_bucket'] = pd.cut(
-        df['salary_max'],
-        bins=[0, 50000, 80000, 120000, 160000, 200000, 99999999],
-        labels=['≤ 50k', '50k–80k', '80k–120k', '120k–160k', '160k–200k', '> 200k']
-    )
-
+    # Carrega o DataFrame já limpo gerado pelo script de tratamento
+    df = pd.read_csv("data/job_market_clean.csv")
+    df['salary_bucket'] = df['salary_bucket'].astype('category')
     return df
 
 df = load_and_clean_data()
