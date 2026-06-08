@@ -10,6 +10,19 @@ df = pd.read_csv("data/job_market.csv")
 colunas_texto=['job_type', 'category', 'skills']
 df[colunas_texto]= df[colunas_texto].fillna('Não Informado')
 
+# Normalização de job_type para unificar variantes como full time e full-time
+df['job_type'] = df['job_type'].astype(str).str.strip().str.replace(r'[\s-]+', ' ', regex=True).str.lower()
+df['job_type'] = df['job_type'].replace({
+    'não informado': 'Não Informado',
+    'full time': 'Full-time',
+    'fulltime': 'Full-time',
+    'part time': 'Part-time',
+    'parttime': 'Part-time',
+    'remote': 'Remote',
+    'contract': 'Contract',
+    'manager': 'Manager'
+})
+
 print("-"*30)
 print((df[colunas_texto]=='Não Informado').sum())
 
