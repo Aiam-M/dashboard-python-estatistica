@@ -211,9 +211,6 @@ col4.metric("Experiência Média (Anos)", f"{media_experiencia:.1f}")
 if remove_outliers:
     st.info(f"{outliers_removidos} registros foram removidos do conjunto filtrado porque eram outliers de salário ou experiência.")
 
-st.markdown("### Variável categórica de interesse: **{}**".format(variavel_alvo))
-st.markdown("---")
-
 aba1, aba2, aba3 = st.tabs([
     "📊 Distribuições e Outliers",
     "📍 Localização e Categorias",
@@ -346,13 +343,7 @@ with aba3:
     sal_highest_category = df_filtered.groupby('category')['salary_avg'].mean().idxmax()
     avg_highest_category = df_filtered.groupby('category')['salary_avg'].mean().max()
 
-    st.markdown("### Insights relevantes")
-    st.markdown(
-        f"- A correlação entre experiência e salário médio é de **{corr_exp_salary:.2f}**, indicando uma relação moderada a alta.\n"
-        f"- **{remote_share:.1f}%** das vagas filtradas são remotas.\n"
-        f"- A categoria com maior salário médio no conjunto filtrado é **{sal_highest_category}** com média de **R$ {avg_highest_category:,.2f}**.\n"
-        f"- A variável categórica destacada para análise é **{variavel_alvo}**, que é um bom candidato para a segunda parte probabilística do projeto."
-    )
+    
 
 with st.expander("📄 Visualizar Dados Brutos (Filtrados)"):
     st.dataframe(df_filtered.sort_values(by='publication_date', ascending=False), width='stretch')
