@@ -18,113 +18,23 @@ st.set_page_config(
 )
 
 
+# Colunas textuais tratadas como categoria (o CSV não preserva dtype)
+COLUNAS_CATEGORICAS = [
+    'job_title', 'company', 'location', 'job_type', 'category',
+    'skills', 'education_level', 'company_size', 'benefits',
+    'cidade', 'estado', 'is_remote'
+]
+
+
 @st.cache_data
-def load_and_clean_data():
-    df = pd.read_csv("data/job_market.csv")
-
-    # Remoção de duplicatas e preenchimento de valores textuais ausentes
-    df = df.drop_duplicates()
-    colunas_texto = ['job_type', 'category', 'skills']
-    df[colunas_texto] = df[colunas_texto].fillna('Não Informado')
-
-    # Normalização de job_type para unificar variantes como full time e full-time
-    df['job_type'] = df['job_type'].astype(str).str.strip().str.replace(r'[\s-]+', ' ', regex=True).str.lower()
-    df['job_type'] = df['job_type'].replace({
-        'não informado': 'Não Informado',
-        'full time': 'Full-time',
-        'fulltime': 'Full-time',
-        'part time': 'Part-time',
-        'parttime': 'Part-time',
-        'remote': 'Remote',
-        'contract': 'Contract',
-        'manager': 'Manager'
-    })
-
-    # Conversão de tipos numéricos e criação de média salarial
-    df['salary_min'] = pd.to_numeric(df['salary_min'], errors='coerce').fillna(0.0)
-    df['salary_max'] = pd.to_numeric(df['salary_max'], errors='coerce').fillna(0.0)
-    df['salary_avg'] = (df['salary_min'] + df['salary_max']) / 2
-
-    # Tratamento de experience_required com mediana por cargo
-    df['experience_required'] = pd.to_numeric(df['experience_required'], errors='coerce')
-    df['experience_required'] = df.groupby('job_title')['experience_required'].transform(
-        lambda x: x.fillna(x.median()) if not np.isnan(x.median()) else x
-    )
-    df = df.dropna(subset=['experience_required'])
-    df['experience_required'] = df['experience_required'].astype(int)
-
-    # Normalização e padronização para análise adicional
-    df['salary_avg_z'] = (df['salary_avg'] - df['salary_avg'].mean()) / df['salary_avg'].std(ddof=0)
-    df['experience_norm'] = (df['experience_required'] - df['experience_required'].min()) / (
-        df['experience_required'].max() - df['experience_required'].min()
-    )
-
-    # Conversão de datas e formatação BR
-    timestamps_normais = pd.to_datetime(df['publication_date'], errors='coerce', dayfirst=False)
-    timestamps_unix = pd.to_numeric(df['publication_date'], errors='coerce')
-    datas_unix = pd.to_datetime(timestamps_unix, unit='s', errors='coerce')
-    df['publication_date'] = timestamps_normais.fillna(datas_unix)
-    df['publication_date'] = pd.to_datetime(df['publication_date'], errors='coerce')
-    df['publication_date_BR'] = df['publication_date'].dt.strftime('%d/%m/%Y')
-
-    # Extração de cidade e estado da localização
-    separacao = df['location'].astype(str).str.split(',', expand=True)
-    df['cidade'] = separacao[0].str.strip()
-    df['estado'] = separacao[1].str.strip() if separacao.shape[1] > 1 else 'Não Informado'
-    df.loc[df['cidade'].str.lower().isin(['remote', 'remoto']), 'estado'] = 'Remote'
-
-    # Identificação de trabalho remoto a partir do campo job_type
-    def verificar_remoto(verificacao):
-        if verificacao == 'Não Informado' or pd.isna(verificacao):
-            return 'Não Informado'
-        if 'remote' in str(verificacao).lower():
-            return 'Sim'
-        return 'Não'
-
-    df['is_remote'] = df['job_type'].apply(verificar_remoto)
-
-    # Colunas textuais como categoria
-    colunas_categoricas = [
-        'job_title', 'company', 'location', 'job_type', 'category',
-        'skills', 'education_level', 'company_size', 'benefits',
-        'cidade', 'estado', 'is_remote'
-    ]
-    for col in colunas_categoricas:
-        df[col] = df[col].astype('category')
-
-    # Detecção de outliers usando IQR
-    def detectar_outliers_iqr(serie):
-        q1 = serie.quantile(0.25)
-        q3 = serie.quantile(0.75)
-        iqr = q3 - q1
-        limite_inferior = q1 - 1.5 * iqr
-        limite_superior = q3 + 1.5 * iqr
-        return serie < limite_inferior, serie > limite_superior
-
-    baixas, altas = detectar_outliers_iqr(df['salary_avg'])
-    df['salary_outlier'] = baixas | altas
-    baixas_exp, altas_exp = detectar_outliers_iqr(df['experience_required'])
-    df['experience_outlier'] = baixas_exp | altas_exp
-
+def carregar_dados():
+    # Consome apenas o CSV limpo exportado por programacao.py.
+    # Toda limpeza/derivação de colunas mora em programacao.py.
+    df = pd.read_csv("data/job_market_clean.csv", parse_dates=['publication_date'])
+    for col in COLUNAS_CATEGORICAS:
+        if col in df.columns:
+            df[col] = df[col].astype('category')
     return df
-
-
-def prepare_probability_data(df, n_bins=3):
-    df_prob = df.copy()
-    try:
-        df_prob['salary_class'] = pd.qcut(
-            df_prob['salary_avg'], q=n_bins,
-            labels=['Low', 'Medium', 'High'],
-            duplicates='drop'
-        )
-    except ValueError:
-        df_prob['salary_class'] = pd.cut(
-            df_prob['salary_avg'], bins=n_bins,
-            labels=['Low', 'Medium', 'High']
-        )
-    df_prob = df_prob.dropna(subset=['salary_class'])
-    df_prob['salary_class'] = df_prob['salary_class'].astype(str)
-    return df_prob
 
 
 def compute_posterior_probs(row, priors, likelihoods, feature_cols, alpha=1.0):
@@ -150,7 +60,7 @@ def render_probability_page(df):
     st.markdown("Nesta seção, a variável de interesse é o salário, tratado como `salary_class` (Low/Medium/High). Os preditores usados são `job_title` e `job_type` juntos.")
     st.markdown("---")
 
-    df_prob = prepare_probability_data(df)
+    df_prob = df.copy()
     st.write(f"Total de registros para a análise: **{len(df_prob)}**")
     st.write("A variável alvo é o salário, representado como `salary_class`: Low, Medium ou High.")
 
@@ -249,7 +159,7 @@ def render_probability_page(df):
     st.text(classification_report(y_test, y_pred_lr, labels=labels, zero_division=0))
 
 
-df = load_and_clean_data()
+df = carregar_dados()
 
 st.sidebar.header("Navegação")
 page = st.sidebar.radio("Seção:", ["Dashboard", "Probabilidade"] )
@@ -261,18 +171,22 @@ if page == "Probabilidade":
 # Barra lateral de filtro e opções de análise
 st.sidebar.header("🔍 Filtros de Pesquisa")
 estados = sorted(df['estado'].dropna().unique())
-estado_sel = st.sidebar.multiselect("Selecione o Estado:", estados, default=estados)
+estado_sel = st.sidebar.multiselect("Estado:", estados, default=[])
+
+tipos_vaga = sorted(df['job_type'].dropna().unique())
+tipo_sel = st.sidebar.multiselect("Tipo de Vaga:", tipos_vaga, default=[])
 
 min_exp, max_exp = int(df['experience_required'].min()), int(df['experience_required'].max())
 exp_sel = st.sidebar.slider("Anos de Experiência:", min_exp, max_exp, (min_exp, max_exp))
 remove_outliers = st.sidebar.checkbox("Remover outliers de salário/experiência", value=False)
 variavel_alvo = 'category'
 
-# Filtragem do DF
-filtro = (
-    df['estado'].isin(estado_sel) &
-    df['experience_required'].between(exp_sel[0], exp_sel[1])
-)
+# Filtragem do DF — filtro vazio significa "incluir tudo" (não agressivo)
+filtro = df['experience_required'].between(exp_sel[0], exp_sel[1])
+if estado_sel:
+    filtro = filtro & df['estado'].isin(estado_sel)
+if tipo_sel:
+    filtro = filtro & df['job_type'].isin(tipo_sel)
 
 df_filtered = df[filtro].copy()
 if remove_outliers:
@@ -377,6 +291,30 @@ with aba2:
     fig_pie = px.pie(vagas_estado, values='count', names='estado', hole=0.4,
                      title='Distribuição de vagas por estado')
     st.plotly_chart(fig_pie, width='stretch')
+
+    st.subheader("Tipos de vaga por estado")
+    st.caption("Use para descobrir, por exemplo, quais estados concentram mais vagas remotas. "
+               "Filtre por Tipo de Vaga na barra lateral para focar em um tipo específico.")
+    if df_filtered.empty:
+        st.info("Nenhuma vaga no conjunto filtrado atual.")
+    else:
+        tabela_estado_tipo = pd.crosstab(
+            df_filtered['estado'].astype(str),
+            df_filtered['job_type'].astype(str)
+        )
+        # Ordena os estados pelo total de vagas (do maior para o menor)
+        tabela_estado_tipo = tabela_estado_tipo.loc[
+            tabela_estado_tipo.sum(axis=1).sort_values(ascending=False).index
+        ]
+        fig_estado_tipo = px.imshow(
+            tabela_estado_tipo,
+            text_auto=True,
+            aspect='auto',
+            color_continuous_scale='Blues',
+            labels={'x': 'Tipo de Vaga', 'y': 'Estado', 'color': 'Nº de Vagas'},
+            title='Quantidade de vagas por estado e tipo de vaga'
+        )
+        st.plotly_chart(fig_estado_tipo, width='stretch')
 
 with aba3:
     st.subheader("Correlação entre variáveis quantitativas")

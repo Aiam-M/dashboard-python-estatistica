@@ -9,36 +9,10 @@ from sklearn.metrics import classification_report, confusion_matrix, accuracy_sc
 
 
 def load_and_prepare_data(path):
-    df = pd.read_csv(path)
-    df[['job_type', 'category', 'skills']] = df[['job_type', 'category', 'skills']].fillna('Não Informado')
-
-    df['job_type'] = df['job_type'].astype(str).str.strip().str.replace(r'[\s-]+', ' ', regex=True).str.lower()
-    df['job_type'] = df['job_type'].replace({
-        'não informado': 'Não Informado',
-        'full time': 'Full-time',
-        'fulltime': 'Full-time',
-        'part time': 'Part-time',
-        'parttime': 'Part-time',
-        'remote': 'Remote',
-        'contract': 'Contract',
-        'manager': 'Manager'
-    })
-
-    df['salary_min'] = pd.to_numeric(df['salary_min'], errors='coerce').fillna(0.0)
-    df['salary_max'] = pd.to_numeric(df['salary_max'], errors='coerce').fillna(0.0)
-    df['salary_avg'] = (df['salary_min'] + df['salary_max']) / 2
-
-    df['experience_required'] = pd.to_numeric(df['experience_required'], errors='coerce')
-    df['experience_required'] = df.groupby('job_title')['experience_required'].transform(
-        lambda x: x.fillna(x.median()) if not np.isnan(x.median()) else x
-    )
-    df = df.dropna(subset=['experience_required'])
-    df['experience_required'] = df['experience_required'].astype(int)
-
-    df['salary_class'] = pd.qcut(df['salary_avg'], q=3, labels=['Low', 'Medium', 'High'])
-    df = df.dropna(subset=['salary_class'])
+    # Consome apenas o CSV limpo exportado por programacao.py.
+    # Toda limpeza/derivação (inclusive salary_class) já foi feita lá.
+    df = pd.read_csv(path, parse_dates=['publication_date'])
     df['salary_class'] = df['salary_class'].astype(str)
-
     return df
 
 
@@ -101,7 +75,7 @@ def evaluate_model(y_true, y_pred, label_order=None):
 
 
 def main():
-    data_path = Path('data/job_market.csv')
+    data_path = Path('data/job_market_clean.csv')
     df = load_and_prepare_data(data_path)
 
     target_col = 'salary_class'
